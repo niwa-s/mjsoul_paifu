@@ -1,0 +1,1 @@
+# mjsoul_gamedetail_record_parser
