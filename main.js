@@ -4,8 +4,7 @@ import * as util from 'util'
 import * as fs from 'fs'
 import * as path from 'path'
 
-export const readFile = () => {
-  let filePath = './mahjongsoul_paifu_220619-08a20b82-9b8f-4cff-87c8-9f00c832d510.txt'
+export const readFile = (filePath) => {
   let contents = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf-8' }))
   return contents
 }
@@ -16,8 +15,8 @@ import assert from "assert"
   参考: https://wikiwiki.jp/majsoul-api/%E7%89%8C%E8%AD%9C%E3%82%92%E8%AA%AD%E3%82%80%E3%81%AB%E3%82%83#wed8c5c1
 */
 
-function buildRecordData() {
-  let contents = readFile()
+function buildRecordData(filePath) {
+  let contents = readFile(filePath)
 
   const rounds = []
   let furiten = null
@@ -147,7 +146,8 @@ function buildRecordData() {
 }
 
 function main() {
-  buildRecordData()
+  let filePath = process.argv[2] || './mahjongsoul_paifu_220619-08a20b82-9b8f-4cff-87c8-9f00c832d510.txt'
+  buildRecordData(filePath)
 }
 main()
 
