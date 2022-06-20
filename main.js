@@ -1,5 +1,3 @@
-'use strict'
-
 import * as util from 'util'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -9,12 +7,11 @@ export const readFile = (filePath) => {
   return contents
 }
 
-import assert from "assert"
-
 /*
-  参考: https://wikiwiki.jp/majsoul-api/%E7%89%8C%E8%AD%9C%E3%82%92%E8%AA%AD%E3%82%80%E3%81%AB%E3%82%83#wed8c5c1
+  参考サイト
+  https://wikiwiki.jp/majsoul-api/%E7%89%8C%E8%AD%9C%E3%82%92%E8%AA%AD%E3%82%80%E3%81%AB%E3%82%83#wed8c5c1
+  https://github.com/SAPikachu/amae-koromo-scripts
 */
-
 function buildRecordData(filePath) {
   let contents = readFile(filePath)
 
@@ -26,26 +23,56 @@ function buildRecordData(filePath) {
   for (const action of gameDetail.actions) {
     let itemType = action.type
     if (itemType !== 1) {
-      continue
+      if (itemType === 2) {
+        continue
+      } else {
+        continue
+      }
     }
 
     let actionName = action.result.name
     let actionData = action.result.data
-    if (action.result.name === ".lq.RecordDealTile") {
+    if (actionName === ".lq.RecordDealTile") {
       continue
     }
 
-    if (action.result.name === ".lq.RecordNewRound") {
+    if (actionName === ".lq.RecordNewRound") {
+      let stageInfo = {
+        chang: actionData.chang,
+        ju: actionData.ju,
+        ben: actionData.ben,
+        initialScores: actionData.scores,
+        liqibang: actionData.liqibang,
+      }
+      /*
+      let playersInfo = [0, 1, 2, 3].map((seat) => ({
+        ...(action.result.data[`tiles${seat}`].length === 14
+          ? {
+            parent: true,
+            paishan: action.result.data.paishan
+          } : {}),
+        tiles: action.result.data[`tiles${seat}`],
+        shanten: 1
+      }))*/
+      let playersInfo = []
+      for (let seat in [0, 1, 2, 3]) {
+        let isParent = actionData[`tiles${seat}`].length === 14;
+        if (isParent) {
+          stageInfo.paishan = actionData.paishan
+        }
+        playersInfo.push(
+          {
+            parent: isParent,
+            tiles: actionData[`tiles${seat}`],
+            shanten: 1
+          }
+        )
+      }
       rounds.push(
-        [0, 1, 2, 3].map((seat) => ({
-          ...(action.result.data[`tiles${seat}`].length === 14
-            ? {
-              parent: true,
-              paishan: action.result.data.paishan
-            } : {}),
-          tiles: action.result.data[`tiles${seat}`],
-          shanten: 1
-        }))
+        {
+          playersInfo: playersInfo,
+          stageInfo: stageInfo,
+        }
       )
       furiten = Array(4).fill(false)
       numDiscarded = 0
@@ -53,7 +80,10 @@ function buildRecordData(filePath) {
       continue
     }
 
-    const curRound = rounds[rounds.length - 1]
+    // 現在の局での、プレイヤー毎に集計する必要がある情報(副露・リーチ・和了など)
+    const curRound = rounds[rounds.length - 1].playersInfo
+    // 現在の局での、プレイヤーごとに集計する必要がない情報(牌山・本場数・リー棒の数など)
+    const stageInfo = rounds[rounds.length - 1].stageInfo
     const numPlayers = 4
     switch (actionName) {
       // チー・ポン・大明槓
@@ -62,7 +92,7 @@ function buildRecordData(filePath) {
         break
 
       // 打牌
-      case ".q.RecordDiscardTile":
+      case ".lq.RecordDiscardTile":
         lastDiscardSeat = actionData.seat
         furiten = actionData.zhenting
         if (!curRound[actionData.seat].liqi && (actionData.is_liqi || actionData.is_wliqi)) {
@@ -70,7 +100,7 @@ function buildRecordData(filePath) {
           if (actionData.tingpais && actionData.tingpais.length) {
             curRound[actionData.seat].liqi_tingpai = actionData.tingpais.map((x) => x.tile)
             // TODO: 自分視点での見えていない当たり牌の枚数を数える
-            //curRound[action.data.seat].liqi_tingpai_remaining = 
+            // curRound[action.data.seat].liqi_tingpai_remaining_tiles = 
           }
         }
         if (actionData.is_wliqi) {
@@ -93,14 +123,18 @@ function buildRecordData(filePath) {
       // 和了
       case ".lq.RecordHule":
         actionData.hules.forEach((player) => {
-          curRound[player.seat].hule = [
-            actionData.delta_scores[player.seat] - (player.liqi ? 1000 : 0),
-            [].concat(...player.fans.map((x) => Array(x.val).fill(x.id))),
-            numDiscarded / numPlayers + 1
-          ]
+          curRound[player.seat].hule = {
+            score: actionData.delta_scores[player.seat] - (player.liqi ? 1000 : 0),
+            yaku: [].concat(...player.fans.map((x) => Array(x.val).fill(x.id))),
+            zyunmoku: numDiscarded / numPlayers + 1
+          }
           // TODO: ダブロンとパオの処理
           // point_rongはロンあがりの場合の点数
           // if (!player.zimo && curRound[player.seat].hule)
+
+          stageInfo.justBeforeHoleScores = actionData.old_scores
+          stageInfo.deltaScores = actionData.delta_scores
+          stageInfo.finalScores = actionData.scores
 
           const numLosingPlayers = actionData.delta_scores.filter((x) => x < 0).length
           if (player.zimo) {
@@ -141,8 +175,9 @@ function buildRecordData(filePath) {
       // console.log(action)
     }
   }
-  console.log(util.inspect(rounds[0], {showHidden: false, depth: null, colors: false}))
+  console.log(util.inspect(rounds, { showHidden: false, depth: null, colors: false }))
   // console.log(rounds)
+  return rounds
 }
 
 function main() {
